@@ -1,0 +1,22 @@
+[package]
+name = "voidhw"
+version = "0.1.0"
+edition = "2021"
+description = "Hardware-aware driver and firmware selection for Void Linux"
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "voidhw"
+path = "src/lib.rs"
+
+[[bin]]
+name = "voidhw"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+[profile.release]
+opt-level = 2

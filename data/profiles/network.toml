@@ -1,0 +1,58 @@
+# Wi-Fi: vendor firmware packages, and adapters that need an out-of-tree driver.
+# Device ids for the out-of-tree cases come from the original chwd profiles.
+
+[[profile]]
+id = "wifi-intel-firmware"
+desc = "Intel Wi-Fi firmware"
+priority = 5
+packages = ["linux-firmware-intel"]
+[profile.match]
+class = ["0280"]
+vendor = ["8086"]
+
+[[profile]]
+id = "wifi-network-firmware"
+desc = "Realtek, MediaTek and Atheros Wi-Fi firmware (linux-firmware-network)"
+priority = 5
+packages = ["linux-firmware-network"]
+[profile.match]
+class = ["0280"]
+vendor = ["10ec", "14c3", "168c"]
+
+[[profile]]
+id = "broadcom-wl"
+desc = "Broadcom BCM4352/BCM4360/BCM43a0 Wi-Fi (proprietary wl driver)"
+priority = 10
+packages = ["dkms", "broadcom-wl-dkms", "linux-firmware-broadcom"]
+repos = ["nonfree"]
+notes = ["Reboot after installing so wl replaces the free drivers (it blacklists b43/brcmsmac itself)."]
+[profile.match]
+class = ["0280"]
+vendor = ["14e4"]
+device = ["4365", "43a0", "4352"]
+
+[[profile]]
+id = "broadcom-brcmfmac"
+desc = "Broadcom BCM43602/BCM43455 Wi-Fi (in-kernel brcmfmac, firmware only)"
+priority = 8
+packages = ["linux-firmware-broadcom"]
+[profile.match]
+class = ["0280"]
+vendor = ["14e4"]
+device = ["43ba", "43e3"]
+
+[[profile]]
+id = "rtl8812au"
+desc = "Realtek RTL8812AU USB Wi-Fi (out-of-tree driver)"
+priority = 10
+packages = ["dkms", "rtl8812au-dkms"]
+[profile.match]
+usb = ["0bda:8812", "0bda:881a"]
+
+[[profile]]
+id = "rtl8821cu"
+desc = "Realtek RTL8821CU USB Wi-Fi (out-of-tree driver)"
+priority = 10
+packages = ["dkms", "rtl8821cu-dkms"]
+[profile.match]
+usb = ["0bda:c811", "0bda:b811"]

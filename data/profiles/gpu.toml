@@ -1,0 +1,31 @@
+# Graphics profiles for Intel, AMD and the open-source NVIDIA fallback (nouveau).
+# NVIDIA's proprietary drivers are in nvidia.toml. All package names exist in the Void repos
+# (tools/check-packages.sh verifies that).
+
+[[profile]]
+id = "intel-graphics"
+desc = "Intel integrated graphics (Mesa, VA-API)"
+priority = 10
+packages = ["mesa-dri", "mesa-vulkan-intel", "vulkan-loader", "mesa-vaapi", "intel-video-accel"]
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["8086"]
+
+[[profile]]
+id = "amd-graphics"
+desc = "AMD Radeon graphics (Mesa, Vulkan, VA-API)"
+priority = 10
+packages = ["mesa-dri", "mesa-vulkan-radeon", "vulkan-loader", "mesa-vaapi", "linux-firmware-amd"]
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["1002"]
+
+[[profile]]
+id = "nouveau"
+desc = "NVIDIA GPU no Void proprietary driver supports (open-source nouveau)"
+priority = 1
+packages = ["mesa-dri", "mesa-nouveau-dri", "vulkan-loader", "mesa-vulkan-nouveau"]
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["10de"]
+nvidia_unsupported = true

@@ -1,0 +1,38 @@
+# Machine-level profiles: CPU microcode, laptop power management, hybrid graphics.
+
+[[profile]]
+id = "intel-microcode"
+desc = "Intel CPU microcode updates"
+priority = 10
+packages = ["intel-ucode"]
+repos = ["nonfree"]
+notes = ["Regenerate the initramfs (xbps-reconfigure -f linux<version>) for the microcode to load early."]
+[profile.match]
+cpu_vendor = ["GenuineIntel"]
+
+[[profile]]
+id = "amd-microcode"
+desc = "AMD CPU microcode (shipped in linux-firmware-amd)"
+priority = 10
+packages = ["linux-firmware-amd"]
+[profile.match]
+cpu_vendor = ["AuthenticAMD"]
+
+[[profile]]
+id = "notebook-power"
+desc = "Laptop power profiles"
+priority = 10
+packages = ["power-profiles-daemon"]
+services = ["power-profiles-daemon"]
+[profile.match]
+chassis = ["notebook"]
+
+[[profile]]
+id = "hybrid-graphics"
+desc = "Integrated + NVIDIA graphics: switcheroo-control for per-app GPU selection"
+priority = 10
+packages = ["switcheroo-control"]
+services = ["switcheroo-control"]
+notes = ["Run an application on the NVIDIA GPU with: switcherooctl launch <command>"]
+[profile.match]
+hybrid_graphics = true

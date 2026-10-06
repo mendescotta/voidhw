@@ -1,0 +1,52 @@
+# NVIDIA proprietary drivers, one profile per Void branch. The branch for a GPU comes from
+# data/nvidia-branches.toml (NVIDIA's supported-chips lists). All of them live in the nonfree repo.
+
+[[profile]]
+id = "nvidia-current"
+desc = "NVIDIA proprietary driver, current branch (Turing and newer)"
+priority = 20
+packages = ["nvidia"]
+repos = ["nonfree"]
+[[profile.files]]
+path = "/etc/modprobe.d/voidhw-nvidia-drm.conf"
+content = "options nvidia_drm modeset=1 fbdev=1\n"
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["10de"]
+nvidia_branch = "current"
+
+[[profile]]
+id = "nvidia-580"
+desc = "NVIDIA proprietary driver 580 branch (Maxwell, Pascal, Volta)"
+priority = 20
+packages = ["nvidia580"]
+repos = ["nonfree"]
+[[profile.files]]
+path = "/etc/modprobe.d/voidhw-nvidia-drm.conf"
+content = "options nvidia_drm modeset=1 fbdev=1\n"
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["10de"]
+nvidia_branch = "580"
+
+[[profile]]
+id = "nvidia-470"
+desc = "NVIDIA proprietary driver 470 branch (Kepler)"
+priority = 20
+packages = ["nvidia470"]
+repos = ["nonfree"]
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["10de"]
+nvidia_branch = "470"
+
+[[profile]]
+id = "nvidia-390"
+desc = "NVIDIA proprietary driver 390 branch (Fermi)"
+priority = 20
+packages = ["nvidia390"]
+repos = ["nonfree"]
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["10de"]
+nvidia_branch = "390"
