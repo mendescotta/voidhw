@@ -16,7 +16,9 @@ Without options it only reports what this machine needs; nothing is changed.
   --dry-run          with --apply: print the steps instead of running them
   --json             print the plan as JSON
   --init dinit|runit force the init system for enabling services (default: detected under --root)
-  --root DIR         inspect (and with --apply, change) the system mounted at DIR (default /)
+  --root DIR         the system to inspect and, with --apply, change (default /)
+  --hardware-from DIR  read the hardware from DIR instead of --root; use it to configure an
+                     install target (--root /mnt) for the machine that is running (--hardware-from /)
   --profiles DIR     extra profile files (*.toml); a profile with the same id replaces the built-in one
   --snapshot DIR     save the hardware description to DIR (for bug reports and tests) and exit
   -h, --help         show this help
@@ -28,6 +30,7 @@ struct Args {
     dry_run: bool,
     json: bool,
     root: PathBuf,
+    hardware_from: Option<PathBuf>,
     init: Option<Init>,
     profiles: Option<PathBuf>,
     snapshot: Option<PathBuf>,
@@ -39,6 +42,7 @@ fn parse_args() -> Result<Option<Args>, String> {
         dry_run: false,
         json: false,
         root: PathBuf::from("/"),
+        hardware_from: None,
         init: None,
         profiles: None,
         snapshot: None,
@@ -55,6 +59,7 @@ fn parse_args() -> Result<Option<Args>, String> {
             "--dry-run" => args.dry_run = true,
             "--json" => args.json = true,
             "--root" => args.root = value("--root")?,
+            "--hardware-from" => args.hardware_from = Some(value("--hardware-from")?),
             "--init" => {
                 args.init = Some(match value("--init")?.to_string_lossy().as_ref() {
                     "dinit" => Init::Dinit,
@@ -145,7 +150,7 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
-    let hw = sysfs::scan(&args.root).map_err(|e| format!("cannot read hardware: {e}"))?;
+    let hw = sysfs::scan(args.hardware_from.as_ref().unwrap_or(&args.root)).map_err(|e| format!("cannot read hardware: {e}"))?;
     let mut profiles = profile::embedded();
     if let Some(dir) = &args.profiles {
         profiles = profile::with_overrides(profiles, dir)?;
