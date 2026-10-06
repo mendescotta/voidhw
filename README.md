@@ -5,7 +5,8 @@ Hardware-aware driver and firmware selection for Void Linux.
 `voidhw` reads the machine's PCI and USB devices, CPU vendor and chassis type from sysfs, and works
 out which packages, config files and runit services it needs: Mesa for Intel and AMD GPUs, the
 right NVIDIA driver branch for each NVIDIA GPU, Wi-Fi firmware and DKMS drivers, CPU microcode,
-laptop power management, hybrid-graphics switching.
+laptop power management, hybrid-graphics switching, and guest tools when it runs in a VM (VMware, VirtualBox,
+QEMU/KVM; detected from DMI strings and the virtual PCI devices, as `systemd-detect-virt` does).
 
 By default it only reports. Nothing changes unless you pass `--apply`.
 
@@ -32,9 +33,13 @@ voidhw --json                the same plan as JSON (for installers)
 voidhw --apply --dry-run     preview the install steps
 sudo voidhw --apply          install packages, write files, enable services
 voidhw --root /mnt/target    inspect or (with --apply) configure a system mounted elsewhere
+voidhw --root /mnt/target --hardware-from /   configure the target for the machine running this
 voidhw --profiles DIR        add or override profiles from *.toml files
 voidhw --snapshot DIR        save the hardware description (no serial numbers) for a bug report
 ```
+
+Services are enabled for the init system found under `--root` (dinit or runit; override with `--init`);
+a service the init has no definition for is skipped with a message.
 
 ## NVIDIA branches
 
