@@ -22,7 +22,7 @@ pub fn branch_for(device_hex: &str) -> Option<&'static str> {
     BRANCHES.into_iter().find(|branch| {
         table
             .get(*branch)
-            .is_some_and(|ids| ids.iter().any(|id| *id == device))
+            .is_some_and(|ids| ids.contains(&device))
     })
 }
 
