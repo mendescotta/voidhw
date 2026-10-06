@@ -31,6 +31,10 @@ pub struct Match {
     /// "notebook" or "desktop".
     pub chassis: Vec<String>,
     pub hybrid_graphics: Option<bool>,
+    /// Only inside these hypervisors ("vmware", "virtualbox", "qemu", "hyperv", "xen", "parallels", "other").
+    pub vm: Vec<String>,
+    /// `true`: only on physical hardware; `false`: only inside a VM.
+    pub bare_metal: Option<bool>,
 }
 
 impl Match {
@@ -73,7 +77,7 @@ struct ProfileFile {
     profile: Vec<Profile>,
 }
 
-const EMBEDDED: [(&str, &str); 4] = [
+const EMBEDDED: [(&str, &str); 5] = [
     ("gpu.toml", include_str!("../data/profiles/gpu.toml")),
     ("nvidia.toml", include_str!("../data/profiles/nvidia.toml")),
     (
@@ -81,6 +85,7 @@ const EMBEDDED: [(&str, &str); 4] = [
         include_str!("../data/profiles/network.toml"),
     ),
     ("system.toml", include_str!("../data/profiles/system.toml")),
+    ("vm.toml", include_str!("../data/profiles/vm.toml")),
 ];
 
 pub fn parse(text: &str) -> Result<Vec<Profile>, String> {
@@ -146,7 +151,9 @@ mod tests {
             let has_criterion = m.is_device_level()
                 || !m.cpu_vendor.is_empty()
                 || !m.chassis.is_empty()
-                || m.hybrid_graphics.is_some();
+                || m.hybrid_graphics.is_some()
+                || !m.vm.is_empty()
+                || m.bare_metal.is_some();
             assert!(has_criterion, "{} matches everything", p.id);
             assert!(
                 !p.packages.is_empty() || !p.files.is_empty() || !p.notes.is_empty(),

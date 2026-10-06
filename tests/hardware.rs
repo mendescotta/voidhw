@@ -307,3 +307,97 @@ fn snapshots_round_trip_and_omit_identifying_files() {
         .any(|e| e.file_name() == "serial");
     assert!(!leaked && !out.join("sys/class/dmi/id/product_serial").exists());
 }
+
+/// A VM: like `machine`, plus DMI strings and the CPU hypervisor flag.
+fn vm(
+    name: &str,
+    sys_vendor: &str,
+    product: &str,
+    cpu: &str,
+    pci: &[(&str, u16, u16, u32)],
+) -> PathBuf {
+    let root = machine(name, 1, cpu, pci, &[]);
+    let dmi = root.join("sys/class/dmi/id");
+    fs::write(dmi.join("sys_vendor"), format!("{sys_vendor}\n")).unwrap();
+    fs::write(dmi.join("product_name"), format!("{product}\n")).unwrap();
+    fs::write(
+        root.join("proc/cpuinfo"),
+        format!("vendor_id\t: {cpu}\nflags\t\t: fpu hypervisor\n"),
+    )
+    .unwrap();
+    root
+}
+
+#[test]
+fn vmware_guest_gets_tools_and_mesa_but_no_bare_metal_extras() {
+    let root = vm(
+        "vmware",
+        "VMware, Inc.",
+        "VMware Virtual Platform",
+        "GenuineIntel",
+        &[("0000:00:0f.0", 0x15ad, 0x0405, VGA)],
+    );
+    let plan = plan_for(&root);
+    assert_eq!(plan.hypervisor.as_deref(), Some("vmware"));
+    for profile in ["vm-vmware", "virtual-graphics"] {
+        assert!(
+            plan.profiles.contains(&profile.to_string()),
+            "{profile}: {:?}",
+            plan.profiles
+        );
+    }
+    assert!(has(&plan, "open-vm-tools") && has(&plan, "mesa-dri"));
+    assert!(plan.services.contains(&"vmtoolsd".to_string()));
+    assert!(
+        !plan.profiles.contains(&"intel-microcode".to_string()),
+        "no microcode inside a VM"
+    );
+    assert!(!plan.profiles.contains(&"notebook-power".to_string()));
+    assert!(plan.repos.is_empty(), "{:?}", plan.repos);
+}
+
+#[test]
+fn virtualbox_guest_gets_the_guest_additions() {
+    let root = vm(
+        "vbox",
+        "innotek GmbH",
+        "VirtualBox",
+        "AuthenticAMD",
+        &[("0000:00:02.0", 0x80ee, 0xbeef, VGA)],
+    );
+    let plan = plan_for(&root);
+    assert_eq!(plan.hypervisor.as_deref(), Some("virtualbox"));
+    assert!(has(&plan, "virtualbox-ose-guest"));
+    assert!(plan.services.contains(&"vboxservice".to_string()));
+    assert!(plan.profiles.contains(&"virtual-graphics".to_string()));
+}
+
+#[test]
+fn qemu_guest_gets_the_agent_and_spice() {
+    let root = vm(
+        "qemu",
+        "QEMU",
+        "Standard PC (Q35 + ICH9, 2009)",
+        "GenuineIntel",
+        &[("0000:00:01.0", 0x1af4, 0x1050, VGA)],
+    );
+    let plan = plan_for(&root);
+    assert_eq!(plan.hypervisor.as_deref(), Some("qemu"));
+    assert!(has(&plan, "qemu-ga") && has(&plan, "spice-vdagent"));
+    assert!(plan.services.contains(&"spice-vdagentd".to_string()));
+}
+
+#[test]
+fn an_unidentified_hypervisor_installs_no_guest_tools() {
+    let root = vm("other", "Acme", "Cloud VM", "GenuineIntel", &[]);
+    let plan = plan_for(&root);
+    assert_eq!(plan.hypervisor.as_deref(), Some("other"));
+    assert!(plan.packages.is_empty(), "{:?}", plan.packages);
+}
+
+#[test]
+fn physical_machines_report_no_hypervisor() {
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/notebook-gtx1660ti-ax-wifi");
+    assert_eq!(plan_for(&root).hypervisor, None);
+}

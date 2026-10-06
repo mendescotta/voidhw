@@ -8,6 +8,7 @@ packages = ["intel-ucode"]
 repos = ["nonfree"]
 notes = ["Regenerate the initramfs (xbps-reconfigure -f linux<version>) for the microcode to load early."]
 [profile.match]
+bare_metal = true
 cpu_vendor = ["GenuineIntel"]
 
 [[profile]]
@@ -16,6 +17,7 @@ desc = "AMD CPU microcode (shipped in linux-firmware-amd)"
 priority = 10
 packages = ["linux-firmware-amd"]
 [profile.match]
+bare_metal = true
 cpu_vendor = ["AuthenticAMD"]
 
 [[profile]]
@@ -25,6 +27,7 @@ priority = 10
 packages = ["power-profiles-daemon"]
 services = ["power-profiles-daemon"]
 [profile.match]
+bare_metal = true
 chassis = ["notebook"]
 
 [[profile]]

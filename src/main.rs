@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use voidhw::apply::{self, Options};
+use voidhw::apply::{self, Init, Options};
 use voidhw::plan::{self, Plan};
 use voidhw::{profile, snapshot, sysfs};
 
@@ -15,6 +15,7 @@ Without options it only reports what this machine needs; nothing is changed.
   --apply            install the packages, write the config files and enable the services
   --dry-run          with --apply: print the steps instead of running them
   --json             print the plan as JSON
+  --init dinit|runit force the init system for enabling services (default: detected under --root)
   --root DIR         inspect (and with --apply, change) the system mounted at DIR (default /)
   --profiles DIR     extra profile files (*.toml); a profile with the same id replaces the built-in one
   --snapshot DIR     save the hardware description to DIR (for bug reports and tests) and exit
@@ -27,6 +28,7 @@ struct Args {
     dry_run: bool,
     json: bool,
     root: PathBuf,
+    init: Option<Init>,
     profiles: Option<PathBuf>,
     snapshot: Option<PathBuf>,
 }
@@ -37,6 +39,7 @@ fn parse_args() -> Result<Option<Args>, String> {
         dry_run: false,
         json: false,
         root: PathBuf::from("/"),
+        init: None,
         profiles: None,
         snapshot: None,
     };
@@ -52,6 +55,13 @@ fn parse_args() -> Result<Option<Args>, String> {
             "--dry-run" => args.dry_run = true,
             "--json" => args.json = true,
             "--root" => args.root = value("--root")?,
+            "--init" => {
+                args.init = Some(match value("--init")?.to_string_lossy().as_ref() {
+                    "dinit" => Init::Dinit,
+                    "runit" => Init::Runit,
+                    other => return Err(format!("--init must be dinit or runit, not {other}")),
+                })
+            }
             "--profiles" => args.profiles = Some(value("--profiles")?),
             "--snapshot" => args.snapshot = Some(value("--snapshot")?),
             "-h" | "--help" => {
@@ -81,6 +91,9 @@ fn print_report(hw: &sysfs::Hardware, plan: &Plan) {
             &plan.cpu_vendor
         }
     );
+    if let Some(hypervisor) = &plan.hypervisor {
+        println!("Virtual machine: {hypervisor}");
+    }
     if plan.hybrid_graphics {
         println!("Graphics: hybrid (integrated + NVIDIA)");
     }
@@ -157,6 +170,7 @@ fn run() -> Result<(), String> {
             &Options {
                 root: args.root.clone(),
                 dry_run: args.dry_run,
+                init: args.init,
             },
         )?;
         if !args.json {

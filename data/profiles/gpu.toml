@@ -29,3 +29,12 @@ packages = ["mesa-dri", "mesa-nouveau-dri", "vulkan-loader", "mesa-vulkan-nouvea
 class = ["0300", "0302", "0380"]
 vendor = ["10de"]
 nvidia_unsupported = true
+
+[[profile]]
+id = "virtual-graphics"
+desc = "Virtual GPU (VMware SVGA, VirtualBox VMSVGA, virtio-gpu, QXL, Bochs): Mesa"
+priority = 10
+packages = ["mesa-dri", "vulkan-loader"]
+[profile.match]
+class = ["0300", "0302", "0380"]
+vendor = ["15ad", "80ee", "1af4", "1b36", "1234"]

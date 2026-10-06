@@ -6,10 +6,53 @@ use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Print the commands/files instead of running them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Init {
+    Runit,
+    Dinit,
+}
+
+impl Init {
+    pub fn name(self) -> &'static str {
+        match self {
+            Init::Runit => "runit",
+            Init::Dinit => "dinit",
+        }
+    }
+
+    /// Where the service definition lives and where enabling it puts a link, inside the target system.
+    fn paths(self, service: &str) -> (String, String) {
+        match self {
+            Init::Runit => (
+                format!("/etc/sv/{service}"),
+                format!("/etc/runit/runsvdir/default/{service}"),
+            ),
+            Init::Dinit => (
+                format!("/etc/dinit.d/{service}"),
+                format!("/etc/dinit.d/boot.d/{service}"),
+            ),
+        }
+    }
+}
+
+/// Which init system the system at `root` runs, from its service directories.
+pub fn detect_init(root: &Path) -> Option<Init> {
+    if root.join("etc/dinit.d").is_dir() {
+        Some(Init::Dinit)
+    } else if root.join("etc/runit").is_dir() {
+        Some(Init::Runit)
+    } else {
+        None
+    }
+}
+
+/// What to change, and where.
 pub struct Options {
     pub root: PathBuf,
+    /// Print the commands/files instead of running them.
     pub dry_run: bool,
+    /// Override init detection.
+    pub init: Option<Init>,
 }
 
 fn xbps_install(root: &Path, packages: &[&str]) -> Command {
@@ -77,25 +120,37 @@ pub fn apply(plan: &Plan, options: &Options) -> Result<Vec<String>, String> {
         }
     }
 
-    for service in &plan.services {
-        let link = under(root, &format!("/etc/runit/runsvdir/default/{service}"));
-        let target = format!("/etc/sv/{service}");
-        log.push(format!("enable: {} -> {target}", link.display()));
-        if dry {
-            continue;
+    if !plan.services.is_empty() {
+        match options.init.or_else(|| detect_init(root)) {
+            None => log.push(format!(
+                "skip: cannot tell the init system under {}, not enabling: {}",
+                root.display(),
+                plan.services.join(" ")
+            )),
+            Some(init) => {
+                for service in &plan.services {
+                    let (definition, link_path) = init.paths(service);
+                    let link = under(root, &link_path);
+                    // A dry run happens before the packages exist, so only a real run can check the definition.
+                    if !dry && !under(root, &definition).exists() {
+                        log.push(format!(
+                            "skip: {service} has no {} service ({definition})",
+                            init.name()
+                        ));
+                        continue;
+                    }
+                    log.push(format!("enable: {} -> {definition}", link.display()));
+                    if dry || link.exists() || link.is_symlink() {
+                        continue;
+                    }
+                    if let Some(parent) = link.parent() {
+                        fs::create_dir_all(parent)
+                            .map_err(|e| format!("{}: {e}", parent.display()))?;
+                    }
+                    symlink(&definition, &link).map_err(|e| format!("{}: {e}", link.display()))?;
+                }
+            }
         }
-        if !under(root, &target).exists() {
-            return Err(format!(
-                "service {service} not found at {target}; is its package installed?"
-            ));
-        }
-        if link.exists() || link.is_symlink() {
-            continue;
-        }
-        if let Some(parent) = link.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-        }
-        symlink(&target, &link).map_err(|e| format!("{}: {e}", link.display()))?;
     }
     Ok(log)
 }
@@ -107,8 +162,17 @@ mod tests {
 
     fn temp_root(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("voidhw-apply-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn options(root: &Path, dry_run: bool, init: Option<Init>) -> Options {
+        Options {
+            root: root.to_path_buf(),
+            dry_run,
+            init,
+        }
     }
 
     #[test]
@@ -124,14 +188,7 @@ mod tests {
             services: vec!["switcheroo-control".into()],
             ..Plan::default()
         };
-        let log = apply(
-            &plan,
-            &Options {
-                root: root.clone(),
-                dry_run: true,
-            },
-        )
-        .unwrap();
+        let log = apply(&plan, &options(&root, true, Some(Init::Runit))).unwrap();
         assert!(log.iter().any(|l| l.contains("void-repo-nonfree")));
         assert!(log
             .iter()
@@ -150,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn files_and_service_links_are_written_under_the_root() {
+    fn files_and_runit_links_are_written_under_the_root() {
         let root = temp_root("write");
         fs::create_dir_all(root.join("etc/sv/switcheroo-control")).unwrap();
         let plan = Plan {
@@ -161,14 +218,8 @@ mod tests {
             services: vec!["switcheroo-control".into()],
             ..Plan::default()
         };
-        apply(
-            &plan,
-            &Options {
-                root: root.clone(),
-                dry_run: false,
-            },
-        )
-        .unwrap();
+        let opts = options(&root, false, Some(Init::Runit));
+        apply(&plan, &opts).unwrap();
         assert_eq!(
             fs::read_to_string(root.join("etc/modprobe.d/x.conf")).unwrap(),
             "options a=1\n"
@@ -178,34 +229,69 @@ mod tests {
             fs::read_link(&link).unwrap(),
             PathBuf::from("/etc/sv/switcheroo-control")
         );
-        // Applying twice is fine.
-        apply(
-            &plan,
-            &Options {
-                root: root.clone(),
-                dry_run: false,
-            },
-        )
-        .unwrap();
+        apply(&plan, &opts).unwrap(); // applying twice is fine
         fs::remove_dir_all(&root).ok();
     }
 
     #[test]
-    fn enabling_a_missing_service_is_an_error() {
+    fn dinit_services_are_linked_into_boot_d() {
+        let root = temp_root("dinit");
+        fs::create_dir_all(root.join("etc/dinit.d/boot.d")).unwrap();
+        fs::write(root.join("etc/dinit.d/vmtoolsd"), "type = process\n").unwrap();
+        let plan = Plan {
+            services: vec!["vmtoolsd".into()],
+            ..Plan::default()
+        };
+        apply(&plan, &options(&root, false, None)).unwrap(); // init detected from /etc/dinit.d
+        assert_eq!(
+            fs::read_link(root.join("etc/dinit.d/boot.d/vmtoolsd")).unwrap(),
+            PathBuf::from("/etc/dinit.d/vmtoolsd")
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn init_is_detected_from_the_service_directories() {
+        let root = temp_root("detect");
+        assert_eq!(detect_init(&root), None);
+        fs::create_dir_all(root.join("etc/runit")).unwrap();
+        assert_eq!(detect_init(&root), Some(Init::Runit));
+        fs::create_dir_all(root.join("etc/dinit.d")).unwrap();
+        assert_eq!(detect_init(&root), Some(Init::Dinit));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_service_the_init_has_no_definition_for_is_skipped_not_fatal() {
         let root = temp_root("missing");
+        fs::create_dir_all(root.join("etc/dinit.d/boot.d")).unwrap();
         let plan = Plan {
             services: vec!["nope".into()],
             ..Plan::default()
         };
-        let err = apply(
-            &plan,
-            &Options {
-                root: root.clone(),
-                dry_run: false,
-            },
-        )
-        .unwrap_err();
-        assert!(err.contains("nope"));
+        let log = apply(&plan, &options(&root, false, None)).unwrap();
+        assert!(
+            log.iter()
+                .any(|l| l.starts_with("skip:") && l.contains("nope")),
+            "{log:?}"
+        );
+        assert!(!root.join("etc/dinit.d/boot.d/nope").exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_unknown_init_system_skips_services_with_a_message() {
+        let root = temp_root("noinit");
+        let plan = Plan {
+            services: vec!["x".into()],
+            ..Plan::default()
+        };
+        let log = apply(&plan, &options(&root, false, None)).unwrap();
+        assert!(
+            log.iter()
+                .any(|l| l.contains("cannot tell the init system")),
+            "{log:?}"
+        );
         fs::remove_dir_all(&root).ok();
     }
 }

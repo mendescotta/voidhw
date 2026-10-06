@@ -17,6 +17,7 @@ pub struct Plan {
     pub chassis: String,
     pub cpu_vendor: String,
     pub hybrid_graphics: bool,
+    pub hypervisor: Option<String>,
     pub devices: Vec<DeviceMatch>,
     /// Profile ids in application order, each once.
     pub profiles: Vec<String>,
@@ -82,8 +83,24 @@ fn system_matches(profile: &Profile, hw: &Hardware) -> bool {
             return false;
         }
     }
+    if !m.vm.is_empty()
+        && !hw
+            .hypervisor
+            .is_some_and(|h| contains_ci(&m.vm, h.as_str()))
+    {
+        return false;
+    }
+    if let Some(bare_metal) = m.bare_metal {
+        if bare_metal == hw.hypervisor.is_some() {
+            return false;
+        }
+    }
     // A profile with no criteria at all must not apply to every machine.
-    !(m.cpu_vendor.is_empty() && m.chassis.is_empty() && m.hybrid_graphics.is_none())
+    !(m.cpu_vendor.is_empty()
+        && m.chassis.is_empty()
+        && m.hybrid_graphics.is_none()
+        && m.vm.is_empty()
+        && m.bare_metal.is_none())
 }
 
 fn best<'a>(candidates: impl Iterator<Item = &'a Profile>) -> Option<&'a Profile> {
@@ -109,6 +126,7 @@ pub fn build(hw: &Hardware, profiles: &[Profile]) -> Plan {
         chassis: hw.chassis.as_str().to_string(),
         cpu_vendor: hw.cpu_vendor.clone(),
         hybrid_graphics: hw.hybrid_graphics(),
+        hypervisor: hw.hypervisor.map(|h| h.as_str().to_string()),
         ..Plan::default()
     };
     let mut chosen: Vec<&Profile> = Vec::new();

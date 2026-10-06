@@ -81,6 +81,83 @@ impl Chassis {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Hypervisor {
+    Vmware,
+    Virtualbox,
+    Qemu,
+    Hyperv,
+    Xen,
+    Parallels,
+    /// A hypervisor is present (CPU flag) but it is none of the above.
+    Other,
+}
+
+impl Hypervisor {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Hypervisor::Vmware => "vmware",
+            Hypervisor::Virtualbox => "virtualbox",
+            Hypervisor::Qemu => "qemu",
+            Hypervisor::Hyperv => "hyperv",
+            Hypervisor::Xen => "xen",
+            Hypervisor::Parallels => "parallels",
+            Hypervisor::Other => "other",
+        }
+    }
+}
+
+/// Identify the hypervisor the way `systemd-detect-virt` does for full VMs: DMI vendor/product strings first,
+/// then PCI vendor ids of the virtual devices, then the CPU's `hypervisor` flag as a last resort.
+pub fn detect_hypervisor(
+    dmi: &[&str],
+    pci: &[PciDevice],
+    cpu_hypervisor_flag: bool,
+) -> Option<Hypervisor> {
+    let has = |needle: &str| {
+        dmi.iter().any(|s| {
+            s.to_ascii_lowercase()
+                .contains(&needle.to_ascii_lowercase())
+        })
+    };
+    // Short names must be whole words so "Xenon" or "Okvm" on real hardware do not match.
+    let has_word = |word: &str| {
+        dmi.iter().any(|s| {
+            s.split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|token| token.eq_ignore_ascii_case(word))
+        })
+    };
+    if has("vmware") {
+        return Some(Hypervisor::Vmware);
+    }
+    if has("virtualbox") || has("innotek") {
+        return Some(Hypervisor::Virtualbox);
+    }
+    if has("qemu") || has_word("kvm") || has_word("bochs") {
+        return Some(Hypervisor::Qemu);
+    }
+    if has("parallels") {
+        return Some(Hypervisor::Parallels);
+    }
+    if has_word("xen") {
+        return Some(Hypervisor::Xen);
+    }
+    if dmi.iter().any(|s| s.contains("Microsoft")) && has("virtual machine") {
+        return Some(Hypervisor::Hyperv);
+    }
+    for dev in pci {
+        match dev.vendor {
+            0x15ad => return Some(Hypervisor::Vmware),
+            0x80ee => return Some(Hypervisor::Virtualbox),
+            0x1af4 | 0x1b36 | 0x1234 => return Some(Hypervisor::Qemu),
+            0x1414 => return Some(Hypervisor::Hyperv),
+            _ => {}
+        }
+    }
+    cpu_hypervisor_flag.then_some(Hypervisor::Other)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Hardware {
     pub pci: Vec<PciDevice>,
@@ -88,6 +165,8 @@ pub struct Hardware {
     pub chassis: Chassis,
     /// `vendor_id` from /proc/cpuinfo: GenuineIntel, AuthenticAMD, ...
     pub cpu_vendor: String,
+    /// `Some` when running inside a virtual machine.
+    pub hypervisor: Option<Hypervisor>,
 }
 
 impl Hardware {
@@ -164,20 +243,33 @@ pub fn scan(root: &Path) -> io::Result<Hardware> {
         .map(Chassis::from_smbios)
         .unwrap_or(Chassis::Unknown);
 
-    let cpu_vendor = read_trimmed(&root.join("proc/cpuinfo"))
-        .and_then(|text| {
-            text.lines().find_map(|line| {
-                let (key, value) = line.split_once(':')?;
-                (key.trim() == "vendor_id").then(|| value.trim().to_string())
-            })
+    let cpuinfo = read_trimmed(&root.join("proc/cpuinfo")).unwrap_or_default();
+    let cpu_vendor = cpuinfo
+        .lines()
+        .find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            (key.trim() == "vendor_id").then(|| value.trim().to_string())
         })
         .unwrap_or_default();
+    let cpu_hypervisor_flag = cpuinfo.lines().any(|line| {
+        line.split_once(':').is_some_and(|(key, value)| {
+            key.trim() == "flags" && value.split_whitespace().any(|f| f == "hypervisor")
+        })
+    });
+
+    let dmi: Vec<String> = ["sys_vendor", "product_name", "bios_vendor"]
+        .iter()
+        .filter_map(|name| read_trimmed(&root.join("sys/class/dmi/id").join(name)))
+        .collect();
+    let dmi_refs: Vec<&str> = dmi.iter().map(String::as_str).collect();
+    let hypervisor = detect_hypervisor(&dmi_refs, &pci, cpu_hypervisor_flag);
 
     Ok(Hardware {
         pci,
         usb,
         chassis,
         cpu_vendor,
+        hypervisor,
     })
 }
 
@@ -229,6 +321,79 @@ mod tests {
         assert_eq!(parse_hex("0x10de\n"), Some(0x10de));
         assert_eq!(parse_hex("1d6b"), Some(0x1d6b));
         assert_eq!(parse_hex("zz"), None);
+    }
+
+    fn pci(vendor: u16) -> PciDevice {
+        PciDevice {
+            address: String::new(),
+            vendor,
+            device: 0,
+            class: 0x030000,
+        }
+    }
+
+    #[test]
+    fn hypervisors_are_identified_from_dmi_strings() {
+        let detect = |dmi: &[&str]| detect_hypervisor(dmi, &[], true);
+        assert_eq!(
+            detect(&["VMware, Inc.", "VMware Virtual Platform"]),
+            Some(Hypervisor::Vmware)
+        );
+        assert_eq!(
+            detect(&["innotek GmbH", "VirtualBox"]),
+            Some(Hypervisor::Virtualbox)
+        );
+        assert_eq!(
+            detect(&["QEMU", "Standard PC (Q35 + ICH9, 2009)"]),
+            Some(Hypervisor::Qemu)
+        );
+        assert_eq!(
+            detect(&["Microsoft Corporation", "Virtual Machine"]),
+            Some(Hypervisor::Hyperv)
+        );
+        assert_eq!(detect(&["Xen", "HVM domU"]), Some(Hypervisor::Xen));
+        assert_eq!(
+            detect(&["Parallels Software International Inc."]),
+            Some(Hypervisor::Parallels)
+        );
+    }
+
+    #[test]
+    fn hypervisor_falls_back_to_pci_vendors_then_the_cpu_flag() {
+        assert_eq!(
+            detect_hypervisor(&["Some Vendor"], &[pci(0x15ad)], false),
+            Some(Hypervisor::Vmware)
+        );
+        assert_eq!(
+            detect_hypervisor(&[], &[pci(0x80ee)], false),
+            Some(Hypervisor::Virtualbox)
+        );
+        assert_eq!(
+            detect_hypervisor(&[], &[pci(0x8086)], true),
+            Some(Hypervisor::Other)
+        );
+    }
+
+    #[test]
+    fn real_hardware_is_not_a_vm() {
+        assert_eq!(
+            detect_hypervisor(
+                &["LENOVO", "20XW", "LENOVO"],
+                &[pci(0x8086), pci(0x10de)],
+                false
+            ),
+            None
+        );
+        assert_eq!(
+            detect_hypervisor(&["Microsoft Corporation", "Surface Laptop 4"], &[], false),
+            None,
+            "a Surface is not Hyper-V"
+        );
+        assert_eq!(
+            detect_hypervisor(&["Xenon Systems", "Okvm-1000"], &[], false),
+            None,
+            "substrings of real vendors"
+        );
     }
 
     #[test]

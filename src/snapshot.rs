@@ -38,18 +38,28 @@ pub fn write(root: &Path, out: &Path) -> io::Result<()> {
     copy_files(
         &root.join("sys/class/dmi/id"),
         &out.join("sys/class/dmi/id"),
-        &["chassis_type"],
+        &["chassis_type", "sys_vendor", "product_name", "bios_vendor"],
     )?;
 
-    // Only the CPU vendor and model line of the first processor.
+    // Only the CPU vendor, model and whether the hypervisor flag is set (first processor).
     if let Ok(cpuinfo) = fs::read_to_string(root.join("proc/cpuinfo")) {
         let kept: Vec<&str> = cpuinfo
             .lines()
             .take_while(|line| !line.trim().is_empty())
             .filter(|line| line.starts_with("vendor_id") || line.starts_with("model name"))
             .collect();
+        let hypervisor = cpuinfo
+            .lines()
+            .take_while(|line| !line.trim().is_empty())
+            .any(|line| {
+                line.starts_with("flags") && line.split_whitespace().any(|f| f == "hypervisor")
+            });
+        let mut text = kept.join("\n") + "\n";
+        if hypervisor {
+            text.push_str("flags\t\t: hypervisor\n");
+        }
         fs::create_dir_all(out.join("proc"))?;
-        fs::write(out.join("proc/cpuinfo"), kept.join("\n") + "\n")?;
+        fs::write(out.join("proc/cpuinfo"), text)?;
     }
     Ok(())
 }

@@ -19,11 +19,9 @@ fn table() -> &'static HashMap<String, Vec<String>> {
 pub fn branch_for(device_hex: &str) -> Option<&'static str> {
     let device = device_hex.to_ascii_lowercase();
     let table = table();
-    BRANCHES.into_iter().find(|branch| {
-        table
-            .get(*branch)
-            .is_some_and(|ids| ids.contains(&device))
-    })
+    BRANCHES
+        .into_iter()
+        .find(|branch| table.get(*branch).is_some_and(|ids| ids.contains(&device)))
 }
 
 #[cfg(test)]

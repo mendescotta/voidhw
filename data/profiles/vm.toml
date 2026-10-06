@@ -1,0 +1,39 @@
+# Guest tools for virtual machines. Services are runit names; voidhw enables the matching
+# dinit service on dinit systems.
+
+[[profile]]
+id = "vm-vmware"
+desc = "VMware guest tools (clipboard, shared folders, display resize)"
+priority = 10
+packages = ["open-vm-tools"]
+services = ["vmtoolsd", "vmware-vmblock-fuse"]
+notes = ["Enable 3D acceleration in the VM settings for the best graphics (vmwgfx)."]
+[profile.match]
+vm = ["vmware"]
+
+[[profile]]
+id = "vm-virtualbox"
+desc = "VirtualBox Guest Additions"
+priority = 10
+packages = ["virtualbox-ose-guest"]
+services = ["vboxservice"]
+notes = ["Use the VMSVGA graphics controller with 3D acceleration enabled, 128 MB of video memory."]
+[profile.match]
+vm = ["virtualbox"]
+
+[[profile]]
+id = "vm-qemu"
+desc = "QEMU/KVM guest agent and SPICE integration"
+priority = 10
+packages = ["qemu-ga", "spice-vdagent"]
+services = ["spice-vdagentd"]
+[profile.match]
+vm = ["qemu"]
+
+[[profile]]
+id = "vm-hyperv"
+desc = "Hyper-V guest (drivers are in the kernel)"
+priority = 10
+notes = ["Hyper-V integration services are built into the Void kernel; nothing to install."]
+[profile.match]
+vm = ["hyperv"]
