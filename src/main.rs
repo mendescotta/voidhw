@@ -150,7 +150,8 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
-    let hw = sysfs::scan(args.hardware_from.as_ref().unwrap_or(&args.root)).map_err(|e| format!("cannot read hardware: {e}"))?;
+    let hw = sysfs::scan(args.hardware_from.as_ref().unwrap_or(&args.root))
+        .map_err(|e| format!("cannot read hardware: {e}"))?;
     let mut profiles = profile::embedded();
     if let Some(dir) = &args.profiles {
         profiles = profile::with_overrides(profiles, dir)?;
