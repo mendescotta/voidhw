@@ -15,8 +15,8 @@ vm = ["vmware"]
 id = "vm-virtualbox"
 desc = "VirtualBox Guest Additions"
 priority = 10
-# the matching 7.x kernel modules need headers + dkms; without them the in-tree 6.0.0 driver loads and mismatches
-packages = ["linux-headers", "virtualbox-ose-guest-dkms", "virtualbox-ose-guest"]
+# the dkms package builds the matching 7.x kernel modules; without it the in-tree 6.0.0 driver loads and mismatches
+packages = ["virtualbox-ose-guest-dkms", "virtualbox-ose-guest"]
 services = ["vboxservice"]
 notes = ["The VMSVGA controller uses the vmwgfx driver, which logs 'unsupported hypervisor' on VirtualBox. It is harmless; the VBoxSVGA controller avoids the message (without 3D)."]
 [profile.match]
