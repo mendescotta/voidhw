@@ -3,7 +3,7 @@
 Hardware-aware driver and firmware selection for Void Linux.
 
 `voidhw` reads the machine's PCI and USB devices, CPU vendor and chassis type from sysfs, and works
-out which packages, config files and runit services it needs: Mesa for Intel and AMD GPUs, the
+out which packages, config files and init services it needs: Mesa for Intel and AMD GPUs, the
 right NVIDIA driver branch for each NVIDIA GPU, Wi-Fi firmware and DKMS drivers, CPU microcode,
 laptop power management, hybrid-graphics switching, and guest tools when it runs in a VM (VMware, VirtualBox,
 QEMU/KVM; detected from DMI strings and the virtual PCI devices, as `systemd-detect-virt` does).

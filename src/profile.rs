@@ -64,7 +64,8 @@ pub struct Profile {
     pub packages: Vec<String>,
     /// Extra repositories the packages come from ("nonfree").
     pub repos: Vec<String>,
-    /// runit services to enable (must exist as /etc/sv/<name> once the packages are installed).
+    /// Services to enable, by runit name (must exist as /etc/sv/<name> once the packages are installed;
+    /// on dinit systems the matching dinit service is enabled instead).
     pub services: Vec<String>,
     pub files: Vec<FileSpec>,
     /// Advice shown to the user, never executed.
