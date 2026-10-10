@@ -65,6 +65,15 @@ fn xbps_install(root: &Path, packages: &[&str]) -> Command {
     cmd
 }
 
+fn package_installed(root: &Path, package: &str) -> bool {
+    Command::new("xbps-query")
+        .arg("-r")
+        .arg(root)
+        .args(["-p", "state", package])
+        .output()
+        .is_ok_and(|output| output.status.success() && output.stdout == b"installed\n")
+}
+
 fn describe(cmd: &Command) -> String {
     let mut parts = vec![cmd.get_program().to_string_lossy().into_owned()];
     parts.extend(cmd.get_args().map(|a| a.to_string_lossy().into_owned()));
@@ -97,7 +106,9 @@ pub fn apply(plan: &Plan, options: &Options) -> Result<Vec<String>, String> {
     let dry = options.dry_run;
     let root = options.root.as_path();
 
-    if plan.repos.iter().any(|r| r == "nonfree") {
+    if plan.repos.iter().any(|r| r == "nonfree")
+        && (dry || !package_installed(root, "void-repo-nonfree"))
+    {
         run(
             &mut xbps_install(root, &["void-repo-nonfree"]),
             &mut log,
@@ -105,8 +116,22 @@ pub fn apply(plan: &Plan, options: &Options) -> Result<Vec<String>, String> {
         )?;
     }
     if !plan.packages.is_empty() {
-        let packages: Vec<&str> = plan.packages.iter().map(String::as_str).collect();
-        run(&mut xbps_install(root, &packages), &mut log, dry)?;
+        let packages: Vec<&str> = plan
+            .packages
+            .iter()
+            .map(String::as_str)
+            .filter(|package| {
+                if !dry && package_installed(root, package) {
+                    log.push(format!("skip: {package} is already installed"));
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        if !packages.is_empty() {
+            run(&mut xbps_install(root, &packages), &mut log, dry)?;
+        }
     }
 
     for file in &plan.files {
@@ -173,6 +198,45 @@ mod tests {
             dry_run,
             init,
         }
+    }
+
+    #[test]
+    fn configured_guest_packages_are_skipped_but_services_are_enabled() {
+        if Command::new("xbps-query")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return; // XBPS is available on Void, but not every CI host.
+        }
+        let root = temp_root("installed-guest");
+        fs::create_dir_all(root.join("var/db/xbps")).unwrap();
+        fs::write(root.join("var/db/xbps/pkgdb-0.38.plist"), r#"<?xml version="1.0"?>
+<plist version="1.0"><dict>
+<key>virtualbox-ose-guest</key><dict><key>pkgver</key><string>virtualbox-ose-guest-7.2.20_1</string><key>state</key><string>installed</string></dict>
+<key>virtualbox-ose-guest-dkms</key><dict><key>pkgver</key><string>virtualbox-ose-guest-dkms-7.2.20_1</string><key>state</key><string>installed</string></dict>
+<key>unconfigured</key><dict><key>pkgver</key><string>unconfigured-1_1</string><key>state</key><string>unpacked</string></dict>
+</dict></plist>"#).unwrap();
+        fs::create_dir_all(root.join("etc/dinit.d")).unwrap();
+        fs::write(root.join("etc/dinit.d/vboxservice"), "type = process\n").unwrap();
+        assert!(!package_installed(&root, "unconfigured"));
+        assert!(!package_installed(&root, "missing"));
+        let plan = Plan {
+            packages: vec![
+                "virtualbox-ose-guest".into(),
+                "virtualbox-ose-guest-dkms".into(),
+            ],
+            services: vec!["vboxservice".into()],
+            ..Plan::default()
+        };
+        let log = apply(&plan, &options(&root, false, None)).unwrap();
+        assert_eq!(
+            log.iter().filter(|line| line.starts_with("skip:")).count(),
+            2
+        );
+        assert!(!log.iter().any(|line| line.starts_with("run:")));
+        assert!(root.join("etc/dinit.d/boot.d/vboxservice").is_symlink());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
