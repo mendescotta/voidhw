@@ -329,7 +329,7 @@ fn vm(
 }
 
 #[test]
-fn vmware_guest_gets_tools_and_mesa_but_no_bare_metal_extras() {
+fn vmware_guest_gets_tools_but_no_bare_metal_extras() {
     let root = vm(
         "vmware",
         "VMware, Inc.",
@@ -339,14 +339,12 @@ fn vmware_guest_gets_tools_and_mesa_but_no_bare_metal_extras() {
     );
     let plan = plan_for(&root);
     assert_eq!(plan.hypervisor.as_deref(), Some("vmware"));
-    for profile in ["vm-vmware", "virtual-graphics"] {
-        assert!(
-            plan.profiles.contains(&profile.to_string()),
-            "{profile}: {:?}",
-            plan.profiles
-        );
-    }
-    assert!(has(&plan, "open-vm-tools") && has(&plan, "mesa-dri"));
+    assert!(
+        plan.profiles.contains(&"vm-vmware".to_string()),
+        "vm-vmware: {:?}",
+        plan.profiles
+    );
+    assert!(has(&plan, "open-vm-tools"));
     assert!(plan.services.contains(&"vmtoolsd".to_string()));
     assert!(
         !plan.profiles.contains(&"intel-microcode".to_string()),
@@ -369,7 +367,6 @@ fn virtualbox_guest_gets_the_guest_additions() {
     assert_eq!(plan.hypervisor.as_deref(), Some("virtualbox"));
     assert!(has(&plan, "virtualbox-ose-guest"));
     assert!(plan.services.contains(&"vboxservice".to_string()));
-    assert!(plan.profiles.contains(&"virtual-graphics".to_string()));
 }
 
 #[test]

@@ -6,7 +6,7 @@
 id = "intel-graphics"
 desc = "Intel integrated graphics (Mesa, VA-API)"
 priority = 10
-packages = ["mesa-dri", "mesa-vulkan-intel", "vulkan-loader", "mesa-vaapi", "intel-video-accel"]
+packages = ["mesa-vulkan-intel", "mesa-vaapi", "intel-video-accel"]
 [profile.match]
 class = ["0300", "0302", "0380"]
 vendor = ["8086"]
@@ -15,7 +15,7 @@ vendor = ["8086"]
 id = "amd-graphics"
 desc = "AMD Radeon graphics (Mesa, Vulkan, VA-API)"
 priority = 10
-packages = ["mesa-dri", "mesa-vulkan-radeon", "vulkan-loader", "mesa-vaapi", "linux-firmware-amd"]
+packages = ["mesa-vulkan-radeon", "mesa-vaapi", "linux-firmware-amd"]
 [profile.match]
 class = ["0300", "0302", "0380"]
 vendor = ["1002"]
@@ -24,17 +24,8 @@ vendor = ["1002"]
 id = "nouveau"
 desc = "NVIDIA GPU no Void proprietary driver supports (open-source nouveau)"
 priority = 1
-packages = ["mesa-dri", "mesa-nouveau-dri", "vulkan-loader", "mesa-vulkan-nouveau"]
+packages = ["mesa-nouveau-dri", "mesa-vulkan-nouveau"]
 [profile.match]
 class = ["0300", "0302", "0380"]
 vendor = ["10de"]
 nvidia_unsupported = true
-
-[[profile]]
-id = "virtual-graphics"
-desc = "Virtual GPU (VMware SVGA, VirtualBox VMSVGA, virtio-gpu, QXL, Bochs): Mesa"
-priority = 10
-packages = ["mesa-dri", "vulkan-loader"]
-[profile.match]
-class = ["0300", "0302", "0380"]
-vendor = ["15ad", "80ee", "1af4", "1b36", "1234"]
