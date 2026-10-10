@@ -1,6 +1,6 @@
 [package]
 name = "voidhw"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Hardware-aware driver and firmware selection for Void Linux"
 license = "GPL-3.0-or-later"
