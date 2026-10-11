@@ -86,7 +86,7 @@ fn parse_args() -> Result<Option<Args>, String> {
     Ok(Some(args))
 }
 
-fn print_report(hw: &sysfs::Hardware, plan: &Plan) {
+fn print_report(hw: &sysfs::Hardware, plan: &Plan, show_apply_hint: bool) {
     println!(
         "Machine: {} (CPU {})",
         plan.chassis,
@@ -136,7 +136,9 @@ fn print_report(hw: &sysfs::Hardware, plan: &Plan) {
     for note in &plan.notes {
         println!("Note:         {note}");
     }
-    println!("\nRun with --apply to make these changes (add --dry-run to preview).");
+    if show_apply_hint {
+        println!("\nRun with --apply to make these changes (add --dry-run to preview).");
+    }
 }
 
 fn run() -> Result<(), String> {
@@ -164,7 +166,7 @@ fn run() -> Result<(), String> {
             serde_json::to_string_pretty(&plan).map_err(|e| e.to_string())?
         );
     } else {
-        print_report(&hw, &plan);
+        print_report(&hw, &plan, !args.apply);
     }
 
     if args.apply {
